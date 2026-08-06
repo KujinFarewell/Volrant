@@ -74,10 +74,9 @@ def fmt_prob(num, den):
 # ---------- 界面1 ----------
 def render_map_summary(df):
     st.header("🗺️ Map 数据汇总")
-    # 调整顺序：All Map 综合分析在前，战队Pick Map分析在后
     tabs = st.tabs(["📊 All Map 综合分析", "🏆 战队Pick Map分析"])
     
-    # ===== All Map 综合分析 (tabs[0]) =====
+    # ===== All Map 综合分析 =====
     with tabs[0]:
         st.subheader("全地图综合分析")
         map_stats = []
@@ -205,21 +204,51 @@ def render_map_summary(df):
             
             col1, col2 = st.columns(2)
             with col1:
+                # T/CT/平局胜率柱状图（修改颜色并显示百分比）
                 fig = go.Figure()
-                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['T胜率(加权)'], name='T胜率'))
-                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['CT胜率(加权)'], name='CT胜率'))
-                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['平局率(加权)'], name='平局率'))
+                fig.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['T胜率(加权)'],
+                    name='T胜率',
+                    marker_color='red',
+                    text=[f'{v:.1%}' for v in map_stats_df['T胜率(加权)']],
+                    textposition='outside'
+                ))
+                fig.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['CT胜率(加权)'],
+                    name='CT胜率',
+                    marker_color='blue',
+                    text=[f'{v:.1%}' for v in map_stats_df['CT胜率(加权)']],
+                    textposition='outside'
+                ))
+                fig.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['平局率(加权)'],
+                    name='平局率',
+                    marker_color='gold',
+                    text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
+                    textposition='outside'
+                ))
                 fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400, title="T/CT/平局胜率")
                 st.plotly_chart(fig, use_container_width=True)
-                
                 st.caption("注：T胜率+CT胜率+平局率=1，平局指半场得分相同。")
             
             with col2:
-                fig2 = go.Figure()
+                # 激烈程度分布（修改颜色并显示百分比）
+                color_map = {'碾压': 'green', '一般': 'yellow', '激烈': 'red', '胶着': 'darkred'}
                 categories = ['胶着', '激烈', '一般', '碾压']
+                fig2 = go.Figure()
                 for cat in categories:
-                    fig2.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df[f'{cat}率'], name=cat))
-                fig2.update_layout(barmode='stack', yaxis_tickformat=".0%", height=400, 
+                    fig2.add_trace(go.Bar(
+                        x=map_stats_df['map'],
+                        y=map_stats_df[f'{cat}率'],
+                        name=cat,
+                        marker_color=color_map[cat],
+                        text=[f'{v:.1%}' for v in map_stats_df[f'{cat}率']],
+                        textposition='auto'
+                    ))
+                fig2.update_layout(barmode='stack', yaxis_tickformat=".0%", height=400,
                                    title="激烈程度分布（胶着>22.5, 激烈>21.5, 一般>19.5, 碾压<19.5）")
                 st.plotly_chart(fig2, use_container_width=True)
             
@@ -228,8 +257,67 @@ def render_map_summary(df):
             fig3.update_traces(textposition='outside')
             fig3.update_layout(yaxis_tickformat=".0%")
             st.plotly_chart(fig3, use_container_width=True)
+            
+            # ===== 新增：最强战队 Top3 =====
+            st.subheader("地图最强战队 Top 3")
+            st.caption("排名规则：胜率 > 胜场 > 全场最大分差，且该地图出场次数≥3")
+            
+            team_perf_all = []
+            for map_name, group in df.groupby('map'):
+                if len(group) < 3:
+                    continue
+                # 统计每支队伍在该地图的表现
+                team_stats = {}
+                for _, row in group.iterrows():
+                    t1, t2 = row['team1'], row['team2']
+                    diff = abs(row['team1_score'] - row['team2_score'])
+                    # team1
+                    if t1 not in team_stats:
+                        team_stats[t1] = {'total': 0, 'wins': 0, 'max_diff': 0}
+                    team_stats[t1]['total'] += 1
+                    if row['win'] == t1:
+                        team_stats[t1]['wins'] += 1
+                    team_stats[t1]['max_diff'] = max(team_stats[t1]['max_diff'], diff)
+                    # team2
+                    if t2 not in team_stats:
+                        team_stats[t2] = {'total': 0, 'wins': 0, 'max_diff': 0}
+                    team_stats[t2]['total'] += 1
+                    if row['win'] == t2:
+                        team_stats[t2]['wins'] += 1
+                    team_stats[t2]['max_diff'] = max(team_stats[t2]['max_diff'], diff)
+                
+                perf_list = []
+                for team, stat in team_stats.items():
+                    if stat['total'] < 3:
+                        continue
+                    win_rate = stat['wins'] / stat['total'] if stat['total'] > 0 else 0
+                    perf_list.append({
+                        'team': team,
+                        '胜率': win_rate,
+                        '胜场': stat['wins'],
+                        '总场次': stat['total'],
+                        '最大分差': stat['max_diff']
+                    })
+                if perf_list:
+                    perf_list.sort(key=lambda x: (x['胜率'], x['胜场'], x['最大分差']), reverse=True)
+                    for rank, p in enumerate(perf_list[:3], start=1):
+                        team_perf_all.append({
+                            '地图': map_name,
+                            '排名': rank,
+                            '战队': p['team'],
+                            '胜率': f"{p['胜率']:.1%}",
+                            '胜场': p['胜场'],
+                            '总场次': p['总场次'],
+                            '最大分差': p['最大分差']
+                        })
+            
+            if team_perf_all:
+                top_df = pd.DataFrame(team_perf_all)
+                st.dataframe(top_df, use_container_width=True)
+            else:
+                st.warning("没有足够数据计算Top3")
 
-    # ===== 战队Pick Map分析 (tabs[1]) =====
+    # ===== 战队Pick Map分析 =====
     with tabs[1]:
         st.subheader("自选图 (Pick Map) 汇总（按地图）")
         pick_df = df[df['pick_team'] != '/'].copy()
@@ -240,9 +328,7 @@ def render_map_summary(df):
             results = []
             for map_name, group in pick_df.groupby('map'):
                 total = len(group)
-                # 获胜条件：win == pick_team
                 wins = group[group['win'] == group['pick_team']].shape[0]
-                # 上半场胜、平、负统计（针对 pick_team）
                 half_wins, half_draws, half_losses = 0, 0, 0
                 for _, row in group.iterrows():
                     if row['first_t_side'] == row['pick_team']:
@@ -280,7 +366,7 @@ def render_map_summary(df):
             res_df = res_df.sort_values('pick次数', ascending=False)
             res_df.index = range(1, len(res_df)+1)
             
-            # ---- 全场胜率（先显示） ----
+            # ---- 全场胜率 ----
             st.subheader("🎯 全场胜率（仅胜负）")
             col1_full, col2_full = st.columns([2, 3])
             with col1_full:
@@ -292,7 +378,7 @@ def render_map_summary(df):
                 fig_full.update_layout(yaxis_tickformat=".0%", height=400, title="自选图全场胜率")
                 st.plotly_chart(fig_full, use_container_width=True)
 
-            # ---- 上半场胜平负（后显示） ----
+            # ---- 上半场胜平负 ----
             st.subheader("⏳ 上半场胜率（含平局）")
             col1_half, col2_half = st.columns([2, 3])
             with col1_half:
@@ -317,7 +403,6 @@ def render_map_summary(df):
             comeback = pick_df[pick_df['is_comeback'] == True]
             st.write(f"翻盘场次: {len(comeback)} / {len(pick_df)} ({len(comeback)/len(pick_df)*100:.1f}%)")
             if not comeback.empty:
-                # 构建易读的翻盘表格
                 display_rows = []
                 for _, row in comeback.iterrows():
                     pick = row['pick_team']
@@ -355,7 +440,6 @@ def render_team_view(df):
     all_teams = sorted(set(df['team1'].unique()).union(set(df['team2'].unique())))
     all_teams = [t for t in all_teams if pd.notna(t) and t != '/']
     
-    # 下拉框默认为空
     team_options = [""] + all_teams
     selected = st.selectbox("选择队伍", team_options, index=0)
     if selected:
@@ -378,7 +462,6 @@ def render_team_view(df):
     for map_name, group in team_df.groupby('map'):
         total = len(group)
         wins = group[group['win'] == team].shape[0]
-        # 无场数限制，直接计算
         half_wins = 0
         for _, row in group.iterrows():
             if row['first_t_side'] == team and row['first_t_score'] > row['first_ct_score']:
@@ -387,7 +470,6 @@ def render_team_view(df):
                 half_wins += 1
         half_rate = half_wins / total if total > 0 else 0
         
-        # 手枪
         pistol_wins_total, pistol_total_games = 0, 0
         pistol_t_wins, pistol_t_total = 0, 0
         pistol_ct_wins, pistol_ct_total = 0, 0
@@ -417,7 +499,6 @@ def render_team_view(df):
                     if row['pistol_second'] == team:
                         pistol_ct_wins += 1
         
-        # 先3/6/9
         first_3 = group[group['first_to_3'] == team].shape[0] / total if total > 0 else 0
         first_6 = group[group['first_to_6'] == team].shape[0] / total if total > 0 else 0
         first_9 = group[group['first_to_9'] == team].shape[0] / total if total > 0 else 0
@@ -548,7 +629,6 @@ def render_compare_predict(df):
 
     st.info(f"共同地图: {', '.join(common_maps)}")
 
-    # ---------- 地图选择器（全局） ----------
     map_choice = st.selectbox("选择地图查看（或全览）", ["全部地图"] + common_maps, key="map_choice_compare")
 
     tabs = st.tabs(["📊 数据对比", "🔮 对局预测"])
@@ -559,7 +639,6 @@ def render_compare_predict(df):
     with tabs[0]:
         st.subheader("各项指标对比")
 
-        # 先准备所有地图的对比数据
         compare_data = []
         for map_name in common_maps:
             def get_metrics(team, map_name):
@@ -576,7 +655,6 @@ def render_compare_predict(df):
                     elif row['first_ct_side'] == team and row['first_ct_score'] > row['first_t_score']:
                         half_wins += 1
                 half_rate = half_wins / total if total > 0 else 0
-                # pistol
                 p_wins, p_total = 0, 0
                 for _, row in mp.iterrows():
                     if pd.notna(row['pistol_first']) and row['pistol_first'] != '/':
@@ -625,7 +703,6 @@ def render_compare_predict(df):
 
         comp_df = pd.DataFrame(compare_data)
 
-        # 根据地图选择过滤
         if map_choice != "全部地图":
             comp_df_filtered = comp_df[comp_df['map'] == map_choice]
         else:
@@ -635,16 +712,13 @@ def render_compare_predict(df):
             st.warning(f"没有 {map_choice} 的数据")
             return
 
-        # 重置索引显示
         comp_df_filtered_display = comp_df_filtered.reset_index(drop=True)
         comp_df_filtered_display.index = range(1, len(comp_df_filtered_display) + 1)
         st.dataframe(comp_df_filtered_display, use_container_width=True)
 
-        # 柱状图对比
         metrics_to_plot = ['胜率', '上半场胜率', '手枪胜率', '先3', '先6', '先9']
         for metric in metrics_to_plot:
             fig = go.Figure()
-            # 如果只选了一张图，柱状图只有一根柱子，但用bar显示也可以
             fig.add_trace(go.Bar(
                 x=comp_df_filtered['map'],
                 y=comp_df_filtered[f'{team1}_{metric}'],
@@ -667,9 +741,7 @@ def render_compare_predict(df):
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        # 雷达图（按地图）
         st.subheader("雷达图对比")
-        # 决定显示哪些地图
         maps_to_show = [map_choice] if map_choice != "全部地图" else common_maps
         for map_name in maps_to_show:
             row = comp_df[comp_df['map'] == map_name].iloc[0]
@@ -697,7 +769,6 @@ def render_compare_predict(df):
 
         t_side = st.radio("本场谁先担任进攻方(T)?", [team1, team2], horizontal=True)
 
-        # 确定要预测的地图列表
         maps_to_predict = [map_choice] if map_choice != "全部地图" else common_maps
 
         for map_name in maps_to_predict:
@@ -750,7 +821,6 @@ def render_compare_predict(df):
             col3.metric("预测胜者", team1 if p1 > p2 else team2)
             st.progress(p1, text=f"{team1} 胜率 {p1 * 100:.1f}%")
 
-            # 上半场预测
             def get_half_rate(team, map_name, side):
                 mp = df[(df['map'] == map_name) & ((df['team1'] == team) | (df['team2'] == team))]
                 if mp.empty:
@@ -813,7 +883,6 @@ def render_compare_predict(df):
             avg2 = get_avg_score(team2, map_name, side2)
             st.write(f"**预测半场比分**: {team1} {avg1:.1f} - {avg2:.1f} {team2}")
 
-            # 先3/6/9
             def get_first_to(team, map_name, target):
                 mp = df[(df['map'] == map_name) & ((df['team1'] == team) | (df['team2'] == team))]
                 if mp.empty:
@@ -839,7 +908,6 @@ def render_compare_predict(df):
             col2.metric(f"{team2} 先6", f"{f6_2:.1%}")
             col3.metric(f"{team2} 先9", f"{f9_2:.1%}")
 
-            # 激烈程度 & 总比分
             def get_avg_total(t1, t2, map_name):
                 mp = df[(df['map'] == map_name) &
                         (((df['team1'] == t1) & (df['team2'] == t2)) |
@@ -862,7 +930,6 @@ def render_compare_predict(df):
             score2 = avg_total * p2
             st.write(f"**预测全场**: {intense} (总回合 {avg_total:.1f}), 比分 {team1} {score1:.1f} - {score2:.1f} {team2}")
 
-            # OT概率
             def get_ot_rate(t1, t2, map_name):
                 mp = df[(df['map'] == map_name) &
                         (((df['team1'] == t1) & (df['team2'] == t2)) |
@@ -886,7 +953,6 @@ def main():
             if df is not None:
                 st.session_state.uploaded_data = df
                 st.success(f"加载成功！共 {len(df)} 场有效记录。")
-                # 移除了之前的 st.info 提示
     if st.session_state.uploaded_data is not None:
         df = st.session_state.uploaded_data
         main_tabs = st.tabs(["🗺️ Map数据汇总", "👤 单战队数据查看", "⚔️ 对比与预测"])
