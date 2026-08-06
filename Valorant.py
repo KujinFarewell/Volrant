@@ -240,7 +240,7 @@ def render_map_summary(df):
                 # 获胜条件：win == pick_team
                 wins = group[group['win'] == group['pick_team']].shape[0]
                 # 上半场胜率：pick_team在上半场领先
-                half_wins, half_draws, half_losses = 0, 0, 0
+            half_wins, half_draws, half_losses = 0, 0, 0
 			for _, row in group.iterrows():
 				if row['first_t_side'] == row['pick_team']:
 					if row['first_t_score'] > row['first_ct_score']:
