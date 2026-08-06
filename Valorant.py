@@ -313,6 +313,7 @@ def render_map_summary(df):
             
             if team_perf_all:
                 top_df = pd.DataFrame(team_perf_all)
+                top_df.index = range(1, len(top_df)+1)
                 st.dataframe(top_df, use_container_width=True)
             else:
                 st.warning("没有足够数据计算Top3")
