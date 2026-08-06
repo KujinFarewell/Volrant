@@ -276,29 +276,39 @@ def render_map_summary(df):
             res_df = pd.DataFrame(results)
             res_df = res_df.sort_values('pick次数', ascending=False)
             res_df.index = range(1, len(res_df)+1)  # 索引从1开始
-            
-            col1, col2 = st.columns([2, 3])
-            with col1:
-                st.dataframe(res_df[['map', 'pick次数', 'pick获胜次数', '上半场胜率', '地图胜率']], use_container_width=True)
-            with col2:
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=res_df['map'],
-                    y=res_df['上半场胜率'],
-                    name='上半场胜率',
-                    text=[f"{v:.1%}" for v in res_df['上半场胜率']],
-                    textposition='outside'
-                ))
-                fig.add_trace(go.Bar(
-                    x=res_df['map'],
-                    y=res_df['地图胜率'],
-                    name='地图胜率',
-                    text=[f"{v:.1%}" for v in res_df['地图胜率']],
-                    textposition='outside'
-                ))
-                fig.update_layout(yaxis_tickformat=".0%", height=400, title="自选图胜率汇总")
-                st.plotly_chart(fig, use_container_width=True)
-            
+        
+			# ---- 全场胜率 (先显示) ----
+			st.subheader("🎯 全场胜率（仅胜负）")
+			col1_full, col2_full = st.columns([2, 3])
+			with col1_full:
+				st.dataframe(res_df[['map', 'pick次数', 'pick获胜次数', '地图胜率']], use_container_width=True)
+			with col2_full:
+				fig_full = px.bar(res_df, x='map', y='地图胜率',
+								  text=[f"{v:.1%}" for v in res_df['地图胜率']])
+				fig_full.update_traces(textposition='outside')
+				fig_full.update_layout(yaxis_tickformat=".0%", height=400, title="自选图全场胜率")
+				st.plotly_chart(fig_full, use_container_width=True)
+			
+			# ---- 上半场胜平负 (后显示) ----
+			st.subheader("⏳ 上半场胜率（含平局）")
+			col1_half, col2_half = st.columns([2, 3])
+			with col1_half:
+				st.dataframe(res_df[['map', 'pick次数', '上半场胜率', '上半场平率', '上半场负率']],
+							 use_container_width=True)
+			with col2_half:
+				fig_half = go.Figure()
+				for cat, col in [('胜', '上半场胜率'), ('平', '上半场平率'), ('负', '上半场负率')]:
+					fig_half.add_trace(go.Bar(
+						x=res_df['map'],
+						y=res_df[col],
+						name=cat,
+						text=[f"{v:.1%}" for v in res_df[col]],
+						textposition='outside'
+					))
+				fig_half.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
+									   title="自选图上半场胜/平/负率")
+				st.plotly_chart(fig_half, use_container_width=True)
+			
             # 翻盘统计
             st.subheader("自选图翻盘统计")
             comeback = pick_df[pick_df['is_comeback'] == True]
