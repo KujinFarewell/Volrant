@@ -22,36 +22,40 @@ def load_data(uploaded_file):
     if uploaded_file is None:
         return None
     df = pd.read_excel(uploaded_file, sheet_name=0, engine='openpyxl')
-    
-    required_cols = ['team1', 'team2', 'team1_score', 'team2_score', 
+
+    required_cols = ['team1', 'team2', 'team1_score', 'team2_score',
                      'first_t_score', 'first_ct_score', 'second_t_score', 'second_ct_score',
                      'map', 'pick_team', 'win', 'first_t_side', 'first_ct_side',
                      'pistol_first', 'pistol_second', 'first_to_3', 'first_to_6', 'first_to_9']
-    
+
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         st.error(f"缺少关键列: {missing}，请检查Excel格式")
         return None
-    
+
     df_clean = df.dropna(subset=['team1', 'team2', 'team1_score', 'team2_score', 'map'])
     df_clean = df_clean.dropna(subset=['first_t_score', 'first_ct_score', 'second_t_score', 'second_ct_score'])
-    
-    numeric_cols = ['team1_score', 'team2_score', 'first_t_score', 'first_ct_score', 
+
+    numeric_cols = ['team1_score', 'team2_score', 'first_t_score', 'first_ct_score',
                     'second_t_score', 'second_ct_score']
     for col in numeric_cols:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
     df_clean = df_clean.dropna(subset=numeric_cols)
-    
+
     if df_clean.empty:
         st.error("清洗后无有效数据")
         return None
-    
+
+    # 补充下半场边（上下半场互换）
+    df_clean['second_t_side'] = df_clean['first_ct_side']
+    df_clean['second_ct_side'] = df_clean['first_t_side']
+
     df_clean['total_rounds'] = df_clean['team1_score'] + df_clean['team2_score']
     df_clean['is_ot'] = df_clean['total_rounds'] > 24.5
     df_clean['first_half_diff'] = abs(df_clean['first_t_score'] - df_clean['first_ct_score'])
     df_clean['second_half_diff'] = abs(df_clean['second_t_score'] - df_clean['second_ct_score'])
     df_clean['full_diff'] = abs(df_clean['team1_score'] - df_clean['team2_score'])
-    
+
     def get_first_half_leader(row):
         if row['first_t_score'] > row['first_ct_score']:
             return row['first_t_side']
@@ -62,7 +66,7 @@ def load_data(uploaded_file):
     df_clean['first_half_leader'] = df_clean.apply(get_first_half_leader, axis=1)
     df_clean['is_comeback'] = (df_clean['first_half_diff'] > 4.5) & (df_clean['win'] != df_clean['first_half_leader']) & (df_clean['first_half_leader'].notna())
     df_clean['second_half_total'] = df_clean['second_t_score'] + df_clean['second_ct_score']
-    
+
     return df_clean
 
 # ---------- 工具函数 ----------
@@ -75,7 +79,7 @@ def fmt_prob(num, den):
 def render_map_summary(df):
     st.header("🗺️ Map 数据汇总")
     tabs = st.tabs(["📊 All Map 综合分析", "🏆 战队Pick Map分析"])
-    
+
     # ===== All Map 综合分析 =====
     with tabs[0]:
         st.subheader("全地图综合分析")
@@ -83,12 +87,10 @@ def render_map_summary(df):
         for map_name, group in df.groupby('map'):
             if len(group) < 3:
                 continue
-            # 分差
             first_diffs = group['first_half_diff']
             second_diffs = group['second_half_diff']
             full_diffs = group['full_diff']
-            
-            # 加权T/CT胜率
+
             second_avg = group['second_half_total'].mean()
             if second_avg > 9.5:
                 w1, w2 = 0.5, 0.5
@@ -100,8 +102,7 @@ def render_map_summary(df):
                 w1, w2 = 0.8, 0.2
             else:
                 w1, w2 = 0.9, 0.1
-            
-            # 统计上半场T胜、CT胜、平局
+
             t_wins_f, ct_wins_f, draws_f = 0, 0, 0
             for _, row in group.iterrows():
                 if row['first_t_score'] > row['first_ct_score']:
@@ -110,7 +111,6 @@ def render_map_summary(df):
                     ct_wins_f += 1
                 else:
                     draws_f += 1
-            # 下半场
             t_wins_s, ct_wins_s, draws_s = 0, 0, 0
             for _, row in group.iterrows():
                 if row['second_t_score'] > row['second_ct_score']:
@@ -124,8 +124,7 @@ def render_map_summary(df):
             t_rate = (t_wins_f/total_f)*w1 + (t_wins_s/total_s)*w2
             ct_rate = (ct_wins_f/total_f)*w1 + (ct_wins_s/total_s)*w2
             draw_rate = (draws_f/total_f)*w1 + (draws_s/total_s)*w2
-            
-            # 手枪局胜率（T/CT）
+
             pistol_t_wins, pistol_ct_wins, pistol_total = 0, 0, 0
             for _, row in group.iterrows():
                 if pd.notna(row['pistol_first']) and row['pistol_first'] != '/':
@@ -142,8 +141,7 @@ def render_map_summary(df):
                         pistol_ct_wins += 1
             pistol_t_rate = pistol_t_wins / pistol_total if pistol_total > 0 else 0
             pistol_ct_rate = pistol_ct_wins / pistol_total if pistol_total > 0 else 0
-            
-            # 胜率前三战队（出战>3场）
+
             team_wins = {}
             for _, row in group.iterrows():
                 winner = row['win']
@@ -155,8 +153,7 @@ def render_map_summary(df):
                     top_teams.append(team)
                     if len(top_teams) >= 3:
                         break
-            
-            # 激烈程度
+
             intense = {'胶着':0, '激烈':0, '一般':0, '碾压':0}
             for _, row in group.iterrows():
                 tr = row['total_rounds']
@@ -169,7 +166,7 @@ def render_map_summary(df):
                 else:
                     intense['碾压'] += 1
             total_g = len(group)
-            
+
             map_stats.append({
                 'map': map_name,
                 'T胜率(加权)': t_rate,
@@ -197,114 +194,79 @@ def render_map_summary(df):
                 '上半场CT胜率': ct_wins_f / total_f,
                 '上半场平局率': draws_f / total_f
             })
-        
+
         map_stats_df = pd.DataFrame(map_stats)
         if map_stats_df.empty:
             st.warning("数据量不足，需要每张地图至少3场数据")
         else:
             map_stats_df.index = range(1, len(map_stats_df)+1)
             st.dataframe(map_stats_df, use_container_width=True)
-            
+
             col1, col2 = st.columns(2)
             with col1:
-                # T/CT/平局胜率柱状图（加权）
                 fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['T胜率(加权)'],
-                    name='T胜率',
-                    marker_color='salmon',
-                    text=[f'{v:.1%}' for v in map_stats_df['T胜率(加权)']],
-                    textposition='outside'
-                ))
-                fig.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['CT胜率(加权)'],
-                    name='CT胜率',
-                    marker_color='lightskyblue',
-                    text=[f'{v:.1%}' for v in map_stats_df['CT胜率(加权)']],
-                    textposition='outside'
-                ))
-                fig.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['平局率(加权)'],
-                    name='平局率',
-                    marker_color='gold',
-                    text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
-                    textposition='outside'
-                ))
+                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['T胜率(加权)'], name='T胜率',
+                                     marker_color='salmon',
+                                     text=[f'{v:.1%}' for v in map_stats_df['T胜率(加权)']],
+                                     textposition='outside'))
+                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['CT胜率(加权)'], name='CT胜率',
+                                     marker_color='lightskyblue',
+                                     text=[f'{v:.1%}' for v in map_stats_df['CT胜率(加权)']],
+                                     textposition='outside'))
+                fig.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['平局率(加权)'], name='平局率',
+                                     marker_color='gold',
+                                     text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
+                                     textposition='outside'))
                 fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400, title="T/CT/平局胜率（加权）")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("注：T胜率+CT胜率+平局率=1，平局指半场得分相同。")
 
-                # 上半场 T/CT/平局胜率（已存在，保留）
                 fig_upper = go.Figure()
-                fig_upper.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['上半场T胜率'],
-                    name='T胜率',
-                    marker_color='salmon',
-                    text=[f'{v:.1%}' for v in map_stats_df['上半场T胜率']],
-                    textposition='outside'
-                ))
-                fig_upper.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['上半场CT胜率'],
-                    name='CT胜率',
-                    marker_color='lightskyblue',
-                    text=[f'{v:.1%}' for v in map_stats_df['上半场CT胜率']],
-                    textposition='outside'
-                ))
-                fig_upper.add_trace(go.Bar(
-                    x=map_stats_df['map'],
-                    y=map_stats_df['上半场平局率'],
-                    name='平局率',
-                    marker_color='gold',
-                    text=[f'{v:.1%}' for v in map_stats_df['上半场平局率']],
-                    textposition='outside'
-                ))
+                fig_upper.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['上半场T胜率'], name='T胜率',
+                                           marker_color='salmon',
+                                           text=[f'{v:.1%}' for v in map_stats_df['上半场T胜率']],
+                                           textposition='outside'))
+                fig_upper.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['上半场CT胜率'], name='CT胜率',
+                                           marker_color='lightskyblue',
+                                           text=[f'{v:.1%}' for v in map_stats_df['上半场CT胜率']],
+                                           textposition='outside'))
+                fig_upper.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df['上半场平局率'], name='平局率',
+                                           marker_color='gold',
+                                           text=[f'{v:.1%}' for v in map_stats_df['上半场平局率']],
+                                           textposition='outside'))
                 fig_upper.update_layout(yaxis_tickformat=".0%", barmode='group', height=400,
                                         title="上半场 T/CT/平局胜率")
                 st.plotly_chart(fig_upper, use_container_width=True)
-            
+
             with col2:
-                # 激烈程度分布
                 color_map = {'碾压': 'lightgreen', '一般': 'gold', '激烈': 'salmon', '胶着': 'red'}
                 categories = ['胶着', '激烈', '一般', '碾压']
                 fig2 = go.Figure()
                 for cat in categories:
-                    fig2.add_trace(go.Bar(
-                        x=map_stats_df['map'],
-                        y=map_stats_df[f'{cat}率'],
-                        name=cat,
-                        marker_color=color_map[cat],
-                        text=[f'{v:.1%}' for v in map_stats_df[f'{cat}率']],
-                        textposition='auto'
-                    ))
+                    fig2.add_trace(go.Bar(x=map_stats_df['map'], y=map_stats_df[f'{cat}率'], name=cat,
+                                          marker_color=color_map[cat],
+                                          text=[f'{v:.1%}' for v in map_stats_df[f'{cat}率']],
+                                          textposition='auto'))
                 fig2.update_layout(barmode='stack', yaxis_tickformat=".0%", height=400,
                                    title="激烈程度分布（胶着>22.5, 激烈>21.5, 一般>19.5, 碾压<19.5）")
                 st.plotly_chart(fig2, use_container_width=True)
-            
+
             st.subheader("各地图翻盘率")
             fig3 = px.bar(map_stats_df, x='map', y='翻盘率', text=[f"{v:.1%}" for v in map_stats_df['翻盘率']])
             fig3.update_traces(textposition='outside')
             fig3.update_layout(yaxis_tickformat=".0%")
             st.plotly_chart(fig3, use_container_width=True)
-            
-            # ========== 修改部分：最强战队 Top3（增加最小分差和图表） ==========
+
             st.subheader("地图最强战队 Top 3")
             st.caption("排名规则：胜率 > 胜场 > 全场最大分差，且该地图出场次数≥3")
-            
             team_perf_all = []
             for map_name, group in df.groupby('map'):
                 if len(group) < 3:
                     continue
-                # 统计每支队伍在该地图的表现（增加最小分差）
                 team_stats = {}
                 for _, row in group.iterrows():
                     t1, t2 = row['team1'], row['team2']
                     diff = abs(row['team1_score'] - row['team2_score'])
-                    # team1
                     if t1 not in team_stats:
                         team_stats[t1] = {'total': 0, 'wins': 0, 'max_diff': 0, 'min_diff': 999}
                     team_stats[t1]['total'] += 1
@@ -312,7 +274,6 @@ def render_map_summary(df):
                         team_stats[t1]['wins'] += 1
                     team_stats[t1]['max_diff'] = max(team_stats[t1]['max_diff'], diff)
                     team_stats[t1]['min_diff'] = min(team_stats[t1]['min_diff'], diff)
-                    # team2
                     if t2 not in team_stats:
                         team_stats[t2] = {'total': 0, 'wins': 0, 'max_diff': 0, 'min_diff': 999}
                     team_stats[t2]['total'] += 1
@@ -320,7 +281,6 @@ def render_map_summary(df):
                         team_stats[t2]['wins'] += 1
                     team_stats[t2]['max_diff'] = max(team_stats[t2]['max_diff'], diff)
                     team_stats[t2]['min_diff'] = min(team_stats[t2]['min_diff'], diff)
-                
                 perf_list = []
                 for team, stat in team_stats.items():
                     if stat['total'] < 3:
@@ -341,43 +301,29 @@ def render_map_summary(df):
                             '地图': map_name,
                             '排名': rank,
                             '战队': p['team'],
-                            '胜率_numeric': p['胜率'],                    # 数值用于绘图
-                            '胜率_display': f"{p['胜率']:.1%}",          # 字符串用于表格和标签
+                            '胜率_numeric': p['胜率'],
+                            '胜率_display': f"{p['胜率']:.1%}",
                             '胜场': p['胜场'],
                             '总场次': p['总场次'],
-                            '分差范围': f"{int(p['最小分差'])}-{int(p['最大分差'])}"  # 范围字符串
+                            '分差范围': f"{int(p['最小分差'])}-{int(p['最大分差'])}"
                         })
-            
             if team_perf_all:
                 top_df = pd.DataFrame(team_perf_all)
-                
-                # 表格：显示文本列
-                st.dataframe(
-                    top_df[['地图', '排名', '战队', '胜率_display', '胜场', '总场次', '分差范围']],
-                    use_container_width=True
-                )
-                
-                # 图表：按地图分面显示胜率，hover 显示胜场和分差范围
-                fig_top = px.bar(
-                    top_df,
-                    x='战队',
-                    y='胜率_numeric',
-                    facet_col='地图',
-                    color='战队',
-                    text='胜率_display',
-                    hover_data={'胜场': True, '分差范围': True, '胜率_numeric': False},
-                    category_orders={'排名': [1,2,3]},
-                    title="各图最强战队 Top3 胜率对比"
-                )
+                st.dataframe(top_df[['地图', '排名', '战队', '胜率_display', '胜场', '总场次', '分差范围']],
+                             use_container_width=True)
+                fig_top = px.bar(top_df, x='战队', y='胜率_numeric', facet_col='地图', color='战队',
+                                 text='胜率_display',
+                                 hover_data={'胜场': True, '分差范围': True, '胜率_numeric': False},
+                                 category_orders={'排名': [1,2,3]},
+                                 title="各图最强战队 Top3 胜率对比")
                 fig_top.update_traces(textposition='outside')
                 fig_top.update_layout(yaxis_tickformat=".0%", showlegend=False, height=600)
                 st.plotly_chart(fig_top, use_container_width=True)
             else:
                 st.warning("没有足够数据计算Top3")
-    
+
     # ===== 战队Pick Map分析 =====
     with tabs[1]:
-        # ...（以下保持原有代码不变，此处省略，直接复制原函数中的 tabs[1] 内容即可）
         pick_df = df[df['pick_team'] != '/'].copy()
         pick_df = pick_df.dropna(subset=['pick_team'])
         if pick_df.empty:
@@ -423,8 +369,7 @@ def render_map_summary(df):
             res_df = pd.DataFrame(results)
             res_df = res_df.sort_values('pick次数', ascending=False)
             res_df.index = range(1, len(res_df)+1)
-            
-            # ---- 全场胜率 ----
+
             st.subheader("🎯 全场胜率（仅胜负）")
             col1_full, col2_full = st.columns([2, 3])
             with col1_full:
@@ -436,7 +381,6 @@ def render_map_summary(df):
                 fig_full.update_layout(yaxis_tickformat=".0%", height=400, title="自选图全场胜率")
                 st.plotly_chart(fig_full, use_container_width=True)
 
-            # ---- 上半场胜平负 ----
             st.subheader("⏳ 上半场胜率（含平局）")
             col1_half, col2_half = st.columns([2, 3])
             with col1_half:
@@ -445,18 +389,13 @@ def render_map_summary(df):
             with col2_half:
                 fig_half = go.Figure()
                 for cat, col in [('胜', '上半场胜率'), ('平', '上半场平率'), ('负', '上半场负率')]:
-                    fig_half.add_trace(go.Bar(
-                        x=res_df['map'],
-                        y=res_df[col],
-                        name=cat,
-                        text=[f"{v:.1%}" for v in res_df[col]],
-                        textposition='outside'
-                    ))
+                    fig_half.add_trace(go.Bar(x=res_df['map'], y=res_df[col], name=cat,
+                                             text=[f"{v:.1%}" for v in res_df[col]],
+                                             textposition='outside'))
                 fig_half.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
                                        title="自选图上半场胜/平/负率")
                 st.plotly_chart(fig_half, use_container_width=True)
-            
-            # 翻盘统计
+
             st.subheader("自选图翻盘统计")
             comeback = pick_df[pick_df['is_comeback'] == True]
             st.write(f"翻盘场次: {len(comeback)} / {len(pick_df)} ({len(comeback)/len(pick_df)*100:.1f}%)")
@@ -493,12 +432,12 @@ def render_map_summary(df):
                 df_display.index = range(1, len(df_display) + 1)
                 st.dataframe(df_display, use_container_width=True)
 
-# ---------- 界面2 ----------
+# ---------- 界面2（已按需求修改）----------
 def render_team_view(df):
     st.header("👤 单战队数据查看")
     all_teams = sorted(set(df['team1'].unique()).union(set(df['team2'].unique())))
     all_teams = [t for t in all_teams if pd.notna(t) and t != '/']
-    
+
     team_options = [""] + all_teams
     selected = st.selectbox("选择队伍", team_options, index=0)
     if selected:
@@ -507,28 +446,44 @@ def render_team_view(df):
         st.session_state.selected_team = None
         st.warning("请选择一支队伍")
         return
-    
+
     team = st.session_state.selected_team
     team_df = df[(df['team1'] == team) | (df['team2'] == team)].copy()
     if team_df.empty:
         st.warning(f"队伍 {team} 无有效数据")
         return
-    
+
     st.subheader(f"{team} 数据总览")
     st.write(f"有效比赛场次: {len(team_df)}")
-    
+
     map_perf = []
     for map_name, group in team_df.groupby('map'):
         total = len(group)
         wins = group[group['win'] == team].shape[0]
-        half_wins = 0
+
+        # 上半场胜/平/负
+        half_wins, half_draws, half_losses = 0, 0, 0
         for _, row in group.iterrows():
-            if row['first_t_side'] == team and row['first_t_score'] > row['first_ct_score']:
-                half_wins += 1
-            elif row['first_ct_side'] == team and row['first_ct_score'] > row['first_t_score']:
-                half_wins += 1
+            if row['first_t_side'] == team:
+                if row['first_t_score'] > row['first_ct_score']:
+                    half_wins += 1
+                elif row['first_t_score'] == row['first_ct_score']:
+                    half_draws += 1
+                else:
+                    half_losses += 1
+            elif row['first_ct_side'] == team:
+                if row['first_ct_score'] > row['first_t_score']:
+                    half_wins += 1
+                elif row['first_ct_score'] == row['first_t_score']:
+                    half_draws += 1
+                else:
+                    half_losses += 1
+
         half_rate = half_wins / total if total > 0 else 0
-        
+        half_draw_rate = half_draws / total if total > 0 else 0
+        half_loss_rate = half_losses / total if total > 0 else 0
+
+        # 手枪局统计
         pistol_wins_total, pistol_total_games = 0, 0
         pistol_t_wins, pistol_t_total = 0, 0
         pistol_ct_wins, pistol_ct_total = 0, 0
@@ -557,12 +512,22 @@ def render_team_view(df):
                     pistol_ct_total += 1
                     if row['pistol_second'] == team:
                         pistol_ct_wins += 1
-        
-        first_3 = group[group['first_to_3'] == team].shape[0] / total if total > 0 else 0
-        first_6 = group[group['first_to_6'] == team].shape[0] / total if total > 0 else 0
-        first_9 = group[group['first_to_9'] == team].shape[0] / total if total > 0 else 0
-        
-        intense = {'胶着':0, '激烈':0, '一般':0, '碾压':0}
+
+        pistol_rate = pistol_wins_total / pistol_total_games if pistol_total_games > 0 else 0
+        pistol_t_rate = pistol_t_wins / pistol_t_total if pistol_t_total > 0 else 0
+        pistol_ct_rate = pistol_ct_wins / pistol_ct_total if pistol_ct_total > 0 else 0
+
+        # 先3/6/9（含场数）
+        first3_total = total
+        first3_wins = group[group['first_to_3'] == team].shape[0]
+        first6_wins = group[group['first_to_6'] == team].shape[0]
+        first9_wins = group[group['first_to_9'] == team].shape[0]
+        first3_rate = first3_wins / total if total > 0 else 0
+        first6_rate = first6_wins / total if total > 0 else 0
+        first9_rate = first9_wins / total if total > 0 else 0
+
+        # 激烈程度
+        intense = {'胶着': 0, '激烈': 0, '一般': 0, '碾压': 0}
         for _, row in group.iterrows():
             tr = row['total_rounds']
             if tr > 22.5:
@@ -573,80 +538,202 @@ def render_team_view(df):
                 intense['一般'] += 1
             else:
                 intense['碾压'] += 1
-        
+
         ot_rate = group['is_ot'].sum() / total if total > 0 else 0
         comeback_rate = group['is_comeback'].sum() / total if total > 0 else 0
-        
+
         map_perf.append({
             'map': map_name,
             '总场次': total,
             '胜率': wins / total if total > 0 else 0,
             '胜场': wins,
+            # 上半场
             '上半场胜率': half_rate,
+            '上半场平率': half_draw_rate,
+            '上半场负率': half_loss_rate,
             '半场胜场': half_wins,
-            '手枪总胜率': pistol_wins_total / pistol_total_games if pistol_total_games > 0 else 0,
-            '手枪T胜率': pistol_t_wins / pistol_t_total if pistol_t_total > 0 else 0,
-            '手枪CT胜率': pistol_ct_wins / pistol_ct_total if pistol_ct_total > 0 else 0,
-            '先3胜率': first_3,
-            '先6胜率': first_6,
-            '先9胜率': first_9,
-            '胶着率': intense['胶着']/total,
-            '激烈率': intense['激烈']/total,
-            '一般率': intense['一般']/total,
-            '碾压率': intense['碾压']/total,
+            '半场平场': half_draws,
+            '半场负场': half_losses,
+            # 手枪局
+            '手枪总胜率': pistol_rate,
+            '手枪T胜率': pistol_t_rate,
+            '手枪CT胜率': pistol_ct_rate,
+            '手枪总局数': pistol_total_games,
+            '手枪总胜场': pistol_wins_total,
+            '手枪T总场': pistol_t_total,
+            '手枪T胜场': pistol_t_wins,
+            '手枪CT总场': pistol_ct_total,
+            '手枪CT胜场': pistol_ct_wins,
+            # 先3/6/9
+            '先3胜率': first3_rate,
+            '先3胜场': first3_wins,
+            '先3总场': first3_total,
+            '先6胜率': first6_rate,
+            '先6胜场': first6_wins,
+            '先6总场': first3_total,
+            '先9胜率': first9_rate,
+            '先9胜场': first9_wins,
+            '先9总场': first3_total,
+            # 激烈等
+            '胶着率': intense['胶着'] / total,
+            '胶着场': intense['胶着'],
+            '激烈率': intense['激烈'] / total,
+            '激烈场': intense['激烈'],
+            '一般率': intense['一般'] / total,
+            '一般场': intense['一般'],
+            '碾压率': intense['碾压'] / total,
+            '碾压场': intense['碾压'],
             'OT率': ot_rate,
+            'OT场': group['is_ot'].sum(),
             '翻盘率': comeback_rate,
+            '翻盘场': group['is_comeback'].sum()
         })
-    
+
     perf_df = pd.DataFrame(map_perf)
     if perf_df.empty:
         st.warning(f"{team} 无地图数据")
         return
-    
-    perf_df.index = range(1, len(perf_df)+1)
+
+    perf_df.index = range(1, len(perf_df) + 1)
     tabs = st.tabs(["📈 地图胜率", "⏳ 半场胜率", "🔫 手枪局", "🎯 先3/6/9", "⚡ 激烈/OT/翻盘"])
-    
+
+    # Tab 0: 地图胜率（未动）
     with tabs[0]:
         st.dataframe(perf_df[['map', '总场次', '胜率', '胜场']], use_container_width=True)
-        fig = px.bar(perf_df, x='map', y='胜率', text=[fmt_prob(r['胜场'], r['总场次']) for _, r in perf_df.iterrows()])
+        fig = px.bar(perf_df, x='map', y='胜率',
+                     text=[fmt_prob(r['胜场'], r['总场次']) for _, r in perf_df.iterrows()])
         fig.update_traces(textposition='outside')
         fig.update_layout(yaxis_tickformat=".0%", height=400)
         st.plotly_chart(fig, use_container_width=True)
-    
+
+    # Tab 1: 半场胜率（需求1：增加平和负）
     with tabs[1]:
-        st.dataframe(perf_df[['map', '上半场胜率', '半场胜场', '总场次']], use_container_width=True)
-        fig = px.bar(perf_df, x='map', y='上半场胜率', text=[fmt_prob(r['半场胜场'], r['总场次']) for _, r in perf_df.iterrows()])
-        fig.update_traces(textposition='outside')
-        fig.update_layout(yaxis_tickformat=".0%", height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
+        # 表格增加平和负
+        st.dataframe(perf_df[['map', '总场次', '上半场胜率', '上半场平率', '上半场负率',
+                              '半场胜场', '半场平场', '半场负场']], use_container_width=True)
+        # 图表：胜/平/负分组柱状图
+        fig_half = go.Figure()
+        fig_half.add_trace(go.Bar(x=perf_df['map'], y=perf_df['上半场胜率'], name='胜',
+                                  text=[f"{v:.1%}" for v in perf_df['上半场胜率']],
+                                  textposition='outside'))
+        fig_half.add_trace(go.Bar(x=perf_df['map'], y=perf_df['上半场平率'], name='平',
+                                  text=[f"{v:.1%}" for v in perf_df['上半场平率']],
+                                  textposition='outside'))
+        fig_half.add_trace(go.Bar(x=perf_df['map'], y=perf_df['上半场负率'], name='负',
+                                  text=[f"{v:.1%}" for v in perf_df['上半场负率']],
+                                  textposition='outside'))
+        fig_half.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
+                               title="上半场胜/平/负率")
+        st.plotly_chart(fig_half, use_container_width=True)
+
+    # Tab 2: 手枪局（需求2 & 3）
     with tabs[2]:
-        st.dataframe(perf_df[['map', '手枪总胜率', '手枪T胜率', '手枪CT胜率']], use_container_width=True)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['手枪总胜率'], name='总胜率'))
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['手枪T胜率'], name='T胜率'))
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['手枪CT胜率'], name='CT胜率'))
-        fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
+        # 表格增加场数和胜场
+        st.dataframe(perf_df[['map', '手枪总胜率', '手枪总局数', '手枪总胜场',
+                              '手枪T胜率', '手枪T总场', '手枪T胜场',
+                              '手枪CT胜率', '手枪CT总场', '手枪CT胜场']], use_container_width=True)
+
+        # 柱形图增加百分比，颜色调整
+        fig_pistol = go.Figure()
+        fig_pistol.add_trace(go.Bar(
+            x=perf_df['map'],
+            y=perf_df['手枪总胜率'],
+            name='总胜率',
+            marker_color='plum',  # 浅紫色
+            text=[f"{v:.1%}" for v in perf_df['手枪总胜率']],
+            textposition='outside'
+        ))
+        fig_pistol.add_trace(go.Bar(
+            x=perf_df['map'],
+            y=perf_df['手枪T胜率'],
+            name='T胜率',
+            marker_color='salmon',
+            text=[f"{v:.1%}" for v in perf_df['手枪T胜率']],
+            textposition='outside'
+        ))
+        fig_pistol.add_trace(go.Bar(
+            x=perf_df['map'],
+            y=perf_df['手枪CT胜率'],
+            name='CT胜率',
+            marker_color='lightskyblue',
+            text=[f"{v:.1%}" for v in perf_df['手枪CT胜率']],
+            textposition='outside'
+        ))
+        fig_pistol.update_layout(yaxis_tickformat=".0%", barmode='group', height=400,
+                                title="手枪局胜率")
+        st.plotly_chart(fig_pistol, use_container_width=True)
+
+    # Tab 3: 先3/6/9（需求4）
     with tabs[3]:
-        st.dataframe(perf_df[['map', '先3胜率', '先6胜率', '先9胜率']], use_container_width=True)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['先3胜率'], name='先3'))
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['先6胜率'], name='先6'))
-        fig.add_trace(go.Bar(x=perf_df['map'], y=perf_df['先9胜率'], name='先9'))
-        fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
+        # 表格增加场数
+        st.dataframe(perf_df[['map', '先3胜率', '先3胜场', '先3总场',
+                              '先6胜率', '先6胜场', '先6总场',
+                              '先9胜率', '先9胜场', '先9总场']], use_container_width=True)
+
+        # 柱形图增加百分比
+        fig_first = go.Figure()
+        for metric, color in [('先3胜率', 'blue'), ('先6胜率', 'orange'), ('先9胜率', 'green')]:
+            fig_first.add_trace(go.Bar(
+                x=perf_df['map'],
+                y=perf_df[metric],
+                name=metric.replace('胜率', ''),
+                marker_color=color,
+                text=[f"{v:.1%}" for v in perf_df[metric]],
+                textposition='outside'
+            ))
+        fig_first.update_layout(yaxis_tickformat=".0%", barmode='group', height=400,
+                                title="先3/6/9胜率")
+        st.plotly_chart(fig_first, use_container_width=True)
+
+    # Tab 4: 激烈/OT/翻盘（需求5）
     with tabs[4]:
-        st.dataframe(perf_df[['map', '胶着率', '激烈率', '一般率', '碾压率', 'OT率', '翻盘率']], use_container_width=True)
-        st.caption("胶着>22.5,激烈>21.5, 一般>19.5, 碾压<19.5")
-        fig2 = go.Figure()
-        categories = ['胶着', '激烈', '一般', '碾压']
+        # 表格增加场数和总场次（总场次就是总场次，可加一列）
+        st.dataframe(perf_df[['map', '总场次',
+                              '胶着率', '胶着场',
+                              '激烈率', '激烈场',
+                              '一般率', '一般场',
+                              '碾压率', '碾压场',
+                              'OT率', 'OT场',
+                              '翻盘率', '翻盘场']], use_container_width=True)
+
+        # 柱形图增加百分比，并使用指定颜色
+        categories = ['碾压', '一般', '激烈', '胶着']
+        colors = {'碾压': 'lightgreen', '一般': 'gold', '激烈': 'salmon', '胶着': 'red'}
+        fig_intense = go.Figure()
         for cat in categories:
-            fig2.add_trace(go.Bar(x=perf_df['map'], y=perf_df[f'{cat}率'], name=cat))
-        fig2.update_layout(barmode='stack', yaxis_tickformat=".0%", height=400)
-        st.plotly_chart(fig2, use_container_width=True)
+            fig_intense.add_trace(go.Bar(
+                x=perf_df['map'],
+                y=perf_df[f'{cat}率'],
+                name=cat,
+                marker_color=colors[cat],
+                text=[f"{v:.1%}" for v in perf_df[f'{cat}率']],
+                textposition='auto'
+            ))
+        fig_intense.update_layout(barmode='stack', yaxis_tickformat=".0%", height=400,
+                                  title="激烈程度分布")
+        st.plotly_chart(fig_intense, use_container_width=True)
+
+        # 新增柱形图：加时率和翻盘率
+        fig_ot_cb = go.Figure()
+        fig_ot_cb.add_trace(go.Bar(
+            x=perf_df['map'],
+            y=perf_df['OT率'],
+            name='加时率',
+            marker_color='gray',
+            text=[f"{v:.1%}" for v in perf_df['OT率']],
+            textposition='outside'
+        ))
+        fig_ot_cb.add_trace(go.Bar(
+            x=perf_df['map'],
+            y=perf_df['翻盘率'],
+            name='翻盘率',
+            marker_color='darkred',
+            text=[f"{v:.1%}" for v in perf_df['翻盘率']],
+            textposition='outside'
+        ))
+        fig_ot_cb.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
+                                title="加时与翻盘率")
+        st.plotly_chart(fig_ot_cb, use_container_width=True)
 
 # ---------- 界面3 ----------
 def render_compare_predict(df):
@@ -687,7 +774,6 @@ def render_compare_predict(df):
         return
 
     st.info(f"共同地图: {', '.join(common_maps)}")
-
     map_choice = st.selectbox("选择地图查看（或全览）", ["全部地图"] + common_maps, key="map_choice_compare")
 
     tabs = st.tabs(["📊 数据对比", "🔮 对局预测"])
