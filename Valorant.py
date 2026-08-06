@@ -103,26 +103,26 @@ def render_map_summary(df):
             # 统计上半场T胜、CT胜、平局
             t_wins_f, ct_wins_f, draws_f = 0, 0, 0
             for _, row in group.iterrows():
-                if row['first_t_score'] > row['first_ct_score']:
-                    t_wins_f += 1
-                elif row['first_ct_score'] > row['first_t_score']:
-                    ct_wins_f += 1
-                else:
-                    draws_f += 1
-            # 下半场
-            t_wins_s, ct_wins_s, draws_s = 0, 0, 0
-            for _, row in group.iterrows():
-                if row['second_t_score'] > row['second_ct_score']:
-                    t_wins_s += 1
-                elif row['second_ct_score'] > row['second_t_score']:
-                    ct_wins_s += 1
-                else:
-                    draws_s += 1
-            total_f = len(group)
-            total_s = len(group)
-            t_rate = (t_wins_f/total_f)*w1 + (t_wins_s/total_s)*w2
-            ct_rate = (ct_wins_f/total_f)*w1 + (ct_wins_s/total_s)*w2
-            draw_rate = (draws_f/total_f)*w1 + (draws_s/total_s)*w2
+				if row['first_t_score'] > row['first_ct_score']:
+					t_wins_f += 1
+				elif row['first_ct_score'] > row['first_t_score']:
+					ct_wins_f += 1
+				else:
+					draws_f += 1
+			# 下半场
+			t_wins_s, ct_wins_s, draws_s = 0, 0, 0
+			for _, row in group.iterrows():
+				if row['second_t_score'] > row['second_ct_score']:
+					t_wins_s += 1
+				elif row['second_ct_score'] > row['second_t_score']:
+					ct_wins_s += 1
+				else:
+					draws_s += 1
+			total_f = len(group)
+			total_s = len(group)
+			t_rate = (t_wins_f/total_f)*w1 + (t_wins_s/total_s)*w2
+			ct_rate = (ct_wins_f/total_f)*w1 + (ct_wins_s/total_s)*w2
+			draw_rate = (draws_f/total_f)*w1 + (draws_s/total_s)*w2
             
             # 手枪局胜率（T/CT）
             pistol_t_wins, pistol_ct_wins, pistol_total = 0, 0, 0
