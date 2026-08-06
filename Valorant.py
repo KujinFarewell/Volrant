@@ -207,7 +207,7 @@ def render_map_summary(df):
             
             col1, col2 = st.columns(2)
             with col1:
-                # T/CT/平局胜率柱状图（修改颜色并显示百分比）
+                # T/CT/平局胜率柱状图（加权）
                 fig = go.Figure()
                 fig.add_trace(go.Bar(
                     x=map_stats_df['map'],
@@ -233,24 +233,25 @@ def render_map_summary(df):
                     text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
                     textposition='outside'
                 ))
-                fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400, title="T/CT/平局胜率")
+                fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400, title="T/CT/平局胜率（加权）")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("注：T胜率+CT胜率+平局率=1，平局指半场得分相同。")
 
+                # 上半场 T/CT/平局胜率（已存在，保留）
                 fig_upper = go.Figure()
                 fig_upper.add_trace(go.Bar(
                     x=map_stats_df['map'],
                     y=map_stats_df['上半场T胜率'],
                     name='T胜率',
-                    marker_color='salmon',    # 浅红，也可用 'lightcoral'
+                    marker_color='salmon',
                     text=[f'{v:.1%}' for v in map_stats_df['上半场T胜率']],
                     textposition='outside'
-                    ))
+                ))
                 fig_upper.add_trace(go.Bar(
                     x=map_stats_df['map'],
                     y=map_stats_df['上半场CT胜率'],
                     name='CT胜率',
-                    marker_color='lightskyblue',  # 浅蓝
+                    marker_color='lightskyblue',
                     text=[f'{v:.1%}' for v in map_stats_df['上半场CT胜率']],
                     textposition='outside'
                 ))
@@ -267,7 +268,7 @@ def render_map_summary(df):
                 st.plotly_chart(fig_upper, use_container_width=True)
             
             with col2:
-                # 激烈程度分布（修改颜色并显示百分比）
+                # 激烈程度分布
                 color_map = {'碾压': 'lightgreen', '一般': 'yellow', '激烈': 'salmon', '胶着': 'red'}
                 categories = ['胶着', '激烈', '一般', '碾压']
                 fig2 = go.Figure()
@@ -290,7 +291,7 @@ def render_map_summary(df):
             fig3.update_layout(yaxis_tickformat=".0%")
             st.plotly_chart(fig3, use_container_width=True)
             
-            # ===== 新增：最强战队 Top3 =====
+            # ========== 修改部分：最强战队 Top3（增加最小分差和图表） ==========
             st.subheader("地图最强战队 Top 3")
             st.caption("排名规则：胜率 > 胜场 > 全场最大分差，且该地图出场次数≥3")
             
@@ -298,25 +299,27 @@ def render_map_summary(df):
             for map_name, group in df.groupby('map'):
                 if len(group) < 3:
                     continue
-                # 统计每支队伍在该地图的表现
+                # 统计每支队伍在该地图的表现（增加最小分差）
                 team_stats = {}
                 for _, row in group.iterrows():
                     t1, t2 = row['team1'], row['team2']
                     diff = abs(row['team1_score'] - row['team2_score'])
                     # team1
                     if t1 not in team_stats:
-                        team_stats[t1] = {'total': 0, 'wins': 0, 'max_diff': 0}
+                        team_stats[t1] = {'total': 0, 'wins': 0, 'max_diff': 0, 'min_diff': 999}
                     team_stats[t1]['total'] += 1
                     if row['win'] == t1:
                         team_stats[t1]['wins'] += 1
                     team_stats[t1]['max_diff'] = max(team_stats[t1]['max_diff'], diff)
+                    team_stats[t1]['min_diff'] = min(team_stats[t1]['min_diff'], diff)
                     # team2
                     if t2 not in team_stats:
-                        team_stats[t2] = {'total': 0, 'wins': 0, 'max_diff': 0}
+                        team_stats[t2] = {'total': 0, 'wins': 0, 'max_diff': 0, 'min_diff': 999}
                     team_stats[t2]['total'] += 1
                     if row['win'] == t2:
                         team_stats[t2]['wins'] += 1
                     team_stats[t2]['max_diff'] = max(team_stats[t2]['max_diff'], diff)
+                    team_stats[t2]['min_diff'] = min(team_stats[t2]['min_diff'], diff)
                 
                 perf_list = []
                 for team, stat in team_stats.items():
@@ -328,7 +331,8 @@ def render_map_summary(df):
                         '胜率': win_rate,
                         '胜场': stat['wins'],
                         '总场次': stat['total'],
-                        '最大分差': stat['max_diff']
+                        '最大分差': stat['max_diff'],
+                        '最小分差': stat['min_diff']
                     })
                 if perf_list:
                     perf_list.sort(key=lambda x: (x['胜率'], x['胜场'], x['最大分差']), reverse=True)
@@ -337,22 +341,43 @@ def render_map_summary(df):
                             '地图': map_name,
                             '排名': rank,
                             '战队': p['team'],
-                            '胜率': f"{p['胜率']:.1%}",
+                            '胜率_numeric': p['胜率'],                    # 数值用于绘图
+                            '胜率_display': f"{p['胜率']:.1%}",          # 字符串用于表格和标签
                             '胜场': p['胜场'],
                             '总场次': p['总场次'],
-                            '最大分差': p['最大分差']
+                            '分差范围': f"{p['最小分差']}-{p['最大分差']}"  # 范围字符串
                         })
             
             if team_perf_all:
                 top_df = pd.DataFrame(team_perf_all)
-                top_df.index = range(1, len(top_df)+1)
-                st.dataframe(top_df, use_container_width=True)
+                
+                # 表格：显示文本列
+                st.dataframe(
+                    top_df[['地图', '排名', '战队', '胜率_display', '胜场', '总场次', '分差范围']],
+                    use_container_width=True
+                )
+                
+                # 图表：按地图分面显示胜率，hover 显示胜场和分差范围
+                fig_top = px.bar(
+                    top_df,
+                    x='战队',
+                    y='胜率_numeric',
+                    facet_col='地图',
+                    color='战队',
+                    text='胜率_display',
+                    hover_data={'胜场': True, '分差范围': True, '胜率_numeric': False},
+                    category_orders={'排名': [1,2,3]},
+                    title="各图最强战队 Top3 胜率对比"
+                )
+                fig_top.update_traces(textposition='outside')
+                fig_top.update_layout(yaxis_tickformat=".0%", showlegend=False, height=600)
+                st.plotly_chart(fig_top, use_container_width=True)
             else:
                 st.warning("没有足够数据计算Top3")
-
+    
     # ===== 战队Pick Map分析 =====
     with tabs[1]:
-        st.subheader("自选图 (Pick Map) 汇总（按地图）")
+        # ...（以下保持原有代码不变，此处省略，直接复制原函数中的 tabs[1] 内容即可）
         pick_df = df[df['pick_team'] != '/'].copy()
         pick_df = pick_df.dropna(subset=['pick_team'])
         if pick_df.empty:
@@ -442,7 +467,6 @@ def render_map_summary(df):
                     opp = row['team1'] if row['team2'] == pick else row['team2']
                     half_leader = row['first_half_leader']
                     diff = int(row['first_half_diff'])
-                    # 确定自选队在上半场的角色
                     if row['first_t_side'] == pick:
                         side_pick = 'T'
                         score_pick_half = int(row['first_t_score'])
