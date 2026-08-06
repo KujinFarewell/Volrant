@@ -192,7 +192,10 @@ def render_map_summary(df):
                 '一般率': intense['一般']/total_g,
                 '碾压率': intense['碾压']/total_g,
                 '翻盘率': group['is_comeback'].sum() / total_g,
-                '样本数': total_g
+                '样本数': total_g,
+                '上半场T胜率': t_wins_f / total_f,
+                '上半场CT胜率': ct_wins_f / total_f,
+                '上半场平局率': draws_f / total_f
             })
         
         map_stats_df = pd.DataFrame(map_stats)
@@ -233,6 +236,35 @@ def render_map_summary(df):
                 fig.update_layout(yaxis_tickformat=".0%", barmode='group', height=400, title="T/CT/平局胜率")
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("注：T胜率+CT胜率+平局率=1，平局指半场得分相同。")
+
+                fig_upper = go.Figure()
+                fig_upper.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['上半场T胜率'],
+                    name='T胜率',
+                    marker_color='salmon',    # 浅红，也可用 'lightcoral'
+                    text=[f'{v:.1%}' for v in map_stats_df['上半场T胜率']],
+                    textposition='outside'
+                    ))
+                fig_upper.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['上半场CT胜率'],
+                    name='CT胜率',
+                    marker_color='lightskyblue',  # 浅蓝
+                    text=[f'{v:.1%}' for v in map_stats_df['上半场CT胜率']],
+                    textposition='outside'
+                ))
+                fig_upper.add_trace(go.Bar(
+                    x=map_stats_df['map'],
+                    y=map_stats_df['上半场平局率'],
+                    name='平局率',
+                    marker_color='gold',
+                    text=[f'{v:.1%}' for v in map_stats_df['上半场平局率']],
+                    textposition='outside'
+                ))
+                fig_upper.update_layout(yaxis_tickformat=".0%", barmode='group', height=400,
+                                        title="上半场 T/CT/平局胜率")
+                st.plotly_chart(fig_upper, use_container_width=True)
             
             with col2:
                 # 激烈程度分布（修改颜色并显示百分比）
