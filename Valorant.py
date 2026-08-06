@@ -314,7 +314,36 @@ def render_map_summary(df):
             comeback = pick_df[pick_df['is_comeback'] == True]
             st.write(f"翻盘场次: {len(comeback)} / {len(pick_df)} ({len(comeback)/len(pick_df)*100:.1f}%)")
             if not comeback.empty:
-                st.dataframe(comeback[['map', 'pick_team', 'win', 'first_t_score', 'first_ct_score', 'team1_score', 'team2_score']])
+				display_rows = []
+				for _, row in comeback.iterrows():
+					pick = row['pick_team']
+					opp = row['team1'] if row['team2'] == pick else row['team2']
+					half_leader = row['first_half_leader']
+					diff = int(row['first_half_diff'])
+					# 自选队在上半场的角色及得分
+					if row['first_t_side'] == pick:
+						side_pick = 'T'
+						score_pick_half = int(row['first_t_score'])
+						score_opp_half = int(row['first_ct_score'])
+					else:
+						side_pick = 'CT'
+						score_pick_half = int(row['first_ct_score'])
+						score_opp_half = int(row['first_t_score'])
+					half_str = f"{pick}({side_pick}) {score_pick_half} - {score_opp_half} {opp}"
+					final_t1 = int(row['team1_score'])
+					final_t2 = int(row['team2_score'])
+					final_str = f"{row['team1']} {final_t1} - {final_t2} {row['team2']}"
+					display_rows.append({
+						'地图': row['map'],
+						'自选队伍': pick,
+						'对手': opp,
+						'上半场比分': half_str,
+						'上半场领先方': half_leader,
+						'落后分数': diff,
+						'最终比分': final_str,
+						'翻盘胜者': row['win']
+					})
+					st.dataframe(pd.DataFrame(display_rows), use_container_width=True)
 
 # ---------- 界面2 ----------
 def render_team_view(df):
