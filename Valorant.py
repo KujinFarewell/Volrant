@@ -259,7 +259,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['上半场平局率'],
                     name='平局率',
-                    marker_color='gold',
+                    marker_color='yellow',
                     text=[f'{v:.1%}' for v in map_stats_df['上半场平局率']],
                     textposition='outside'
                 ))
@@ -345,7 +345,7 @@ def render_map_summary(df):
                             '胜率_display': f"{p['胜率']:.1%}",          # 字符串用于表格和标签
                             '胜场': p['胜场'],
                             '总场次': p['总场次'],
-                            '分差范围': f"{p['最小分差']}-{p['最大分差']}"  # 范围字符串
+                            '分差范围': f"{int(p['最小分差'])}-{int(p['最大分差'])}"  # 范围字符串
                         })
             
             if team_perf_all:
