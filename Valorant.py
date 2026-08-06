@@ -432,7 +432,9 @@ def render_map_summary(df):
                         '最终比分': final_str,
                         '翻盘胜者': row['win']
                     })
-                st.dataframe(pd.DataFrame(display_rows), use_container_width=True)
+                df_display = pd.DataFrame(display_rows)
+                df_display.index = range(1, len(df_display) + 1)
+                st.dataframe(df_display, use_container_width=True)
 
 # ---------- 界面2 ----------
 def render_team_view(df):
