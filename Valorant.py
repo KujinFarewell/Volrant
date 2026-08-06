@@ -74,8 +74,10 @@ def fmt_prob(num, den):
 # ---------- 界面1 ----------
 def render_map_summary(df):
     st.header("🗺️ Map 数据汇总")
+    # 调整顺序：All Map 综合分析在前，战队Pick Map分析在后
     tabs = st.tabs(["📊 All Map 综合分析", "🏆 战队Pick Map分析"])
     
+    # ===== All Map 综合分析 (tabs[0]) =====
     with tabs[0]:
         st.subheader("全地图综合分析")
         map_stats = []
@@ -103,26 +105,26 @@ def render_map_summary(df):
             # 统计上半场T胜、CT胜、平局
             t_wins_f, ct_wins_f, draws_f = 0, 0, 0
             for _, row in group.iterrows():
-				if row['first_t_score'] > row['first_ct_score']:
-					t_wins_f += 1
-				elif row['first_ct_score'] > row['first_t_score']:
-					ct_wins_f += 1
-				else:
-					draws_f += 1
-			# 下半场
-			t_wins_s, ct_wins_s, draws_s = 0, 0, 0
-			for _, row in group.iterrows():
-				if row['second_t_score'] > row['second_ct_score']:
-					t_wins_s += 1
-				elif row['second_ct_score'] > row['second_t_score']:
-					ct_wins_s += 1
-				else:
-					draws_s += 1
-			total_f = len(group)
-			total_s = len(group)
-			t_rate = (t_wins_f/total_f)*w1 + (t_wins_s/total_s)*w2
-			ct_rate = (ct_wins_f/total_f)*w1 + (ct_wins_s/total_s)*w2
-			draw_rate = (draws_f/total_f)*w1 + (draws_s/total_s)*w2
+                if row['first_t_score'] > row['first_ct_score']:
+                    t_wins_f += 1
+                elif row['first_ct_score'] > row['first_t_score']:
+                    ct_wins_f += 1
+                else:
+                    draws_f += 1
+            # 下半场
+            t_wins_s, ct_wins_s, draws_s = 0, 0, 0
+            for _, row in group.iterrows():
+                if row['second_t_score'] > row['second_ct_score']:
+                    t_wins_s += 1
+                elif row['second_ct_score'] > row['second_t_score']:
+                    ct_wins_s += 1
+                else:
+                    draws_s += 1
+            total_f = len(group)
+            total_s = len(group)
+            t_rate = (t_wins_f/total_f)*w1 + (t_wins_s/total_s)*w2
+            ct_rate = (ct_wins_f/total_f)*w1 + (ct_wins_s/total_s)*w2
+            draw_rate = (draws_f/total_f)*w1 + (draws_s/total_s)*w2
             
             # 手枪局胜率（T/CT）
             pistol_t_wins, pistol_ct_wins, pistol_total = 0, 0, 0
@@ -227,6 +229,7 @@ def render_map_summary(df):
             fig3.update_layout(yaxis_tickformat=".0%")
             st.plotly_chart(fig3, use_container_width=True)
 
+    # ===== 战队Pick Map分析 (tabs[1]) =====
     with tabs[1]:
         st.subheader("自选图 (Pick Map) 汇总（按地图）")
         pick_df = df[df['pick_team'] != '/'].copy()
@@ -239,111 +242,112 @@ def render_map_summary(df):
                 total = len(group)
                 # 获胜条件：win == pick_team
                 wins = group[group['win'] == group['pick_team']].shape[0]
-                # 上半场胜率：pick_team在上半场领先
-            half_wins, half_draws, half_losses = 0, 0, 0
-			for _, row in group.iterrows():
-				if row['first_t_side'] == row['pick_team']:
-					if row['first_t_score'] > row['first_ct_score']:
-						half_wins += 1
-					elif row['first_t_score'] == row['first_ct_score']:
-						half_draws += 1
-					else:
-						half_losses += 1
-				elif row['first_ct_side'] == row['pick_team']:
-					if row['first_ct_score'] > row['first_t_score']:
-						half_wins += 1
-					elif row['first_ct_score'] == row['first_t_score']:
-						half_draws += 1
-					else:
-						half_losses += 1
-
-                half_rate = half_wins / total if total > 0 else 0
+                # 上半场胜、平、负统计（针对 pick_team）
+                half_wins, half_draws, half_losses = 0, 0, 0
+                for _, row in group.iterrows():
+                    if row['first_t_side'] == row['pick_team']:
+                        if row['first_t_score'] > row['first_ct_score']:
+                            half_wins += 1
+                        elif row['first_t_score'] == row['first_ct_score']:
+                            half_draws += 1
+                        else:
+                            half_losses += 1
+                    elif row['first_ct_side'] == row['pick_team']:
+                        if row['first_ct_score'] > row['first_t_score']:
+                            half_wins += 1
+                        elif row['first_ct_score'] == row['first_t_score']:
+                            half_draws += 1
+                        else:
+                            half_losses += 1
                 map_rate = wins / total if total > 0 else 0
-                results.append({
-			'map': map_name,
-			'pick次数': total,
-			'pick获胜次数': wins,
-			'地图胜率': wins / total if total > 0 else 0,
-			'上半场胜场': half_wins,
-			'上半场平场': half_draws,
-			'上半场负场': half_losses,
-			'上半场胜率': half_wins / total if total > 0 else 0,
-			'上半场平率': half_draws / total if total > 0 else 0,
-			'上半场负率': half_losses / total if total > 0 else 0,
-		})
-		
+                half_win_rate = half_wins / total if total > 0 else 0
+                half_draw_rate = half_draws / total if total > 0 else 0
+                half_loss_rate = half_losses / total if total > 0 else 0
 
+                results.append({
+                    'map': map_name,
+                    'pick次数': total,
+                    'pick获胜次数': wins,
+                    '地图胜率': map_rate,
+                    '上半场胜率': half_win_rate,
+                    '上半场平率': half_draw_rate,
+                    '上半场负率': half_loss_rate,
+                    '上半场胜场': half_wins,
+                    '上半场平场': half_draws,
+                    '上半场负场': half_losses,
+                })
             res_df = pd.DataFrame(results)
             res_df = res_df.sort_values('pick次数', ascending=False)
-            res_df.index = range(1, len(res_df)+1)  # 索引从1开始
-        
-			# ---- 全场胜率 (先显示) ----
-			st.subheader("🎯 全场胜率（仅胜负）")
-			col1_full, col2_full = st.columns([2, 3])
-			with col1_full:
-				st.dataframe(res_df[['map', 'pick次数', 'pick获胜次数', '地图胜率']], use_container_width=True)
-			with col2_full:
-				fig_full = px.bar(res_df, x='map', y='地图胜率',
-								  text=[f"{v:.1%}" for v in res_df['地图胜率']])
-				fig_full.update_traces(textposition='outside')
-				fig_full.update_layout(yaxis_tickformat=".0%", height=400, title="自选图全场胜率")
-				st.plotly_chart(fig_full, use_container_width=True)
-			
-			# ---- 上半场胜平负 (后显示) ----
-			st.subheader("⏳ 上半场胜率（含平局）")
-			col1_half, col2_half = st.columns([2, 3])
-			with col1_half:
-				st.dataframe(res_df[['map', 'pick次数', '上半场胜率', '上半场平率', '上半场负率']],
-							 use_container_width=True)
-			with col2_half:
-				fig_half = go.Figure()
-				for cat, col in [('胜', '上半场胜率'), ('平', '上半场平率'), ('负', '上半场负率')]:
-					fig_half.add_trace(go.Bar(
-						x=res_df['map'],
-						y=res_df[col],
-						name=cat,
-						text=[f"{v:.1%}" for v in res_df[col]],
-						textposition='outside'
-					))
-				fig_half.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
-									   title="自选图上半场胜/平/负率")
-				st.plotly_chart(fig_half, use_container_width=True)
-			
+            res_df.index = range(1, len(res_df)+1)
+            
+            # ---- 全场胜率（先显示） ----
+            st.subheader("🎯 全场胜率（仅胜负）")
+            col1_full, col2_full = st.columns([2, 3])
+            with col1_full:
+                st.dataframe(res_df[['map', 'pick次数', 'pick获胜次数', '地图胜率']], use_container_width=True)
+            with col2_full:
+                fig_full = px.bar(res_df, x='map', y='地图胜率',
+                                  text=[f"{v:.1%}" for v in res_df['地图胜率']])
+                fig_full.update_traces(textposition='outside')
+                fig_full.update_layout(yaxis_tickformat=".0%", height=400, title="自选图全场胜率")
+                st.plotly_chart(fig_full, use_container_width=True)
+
+            # ---- 上半场胜平负（后显示） ----
+            st.subheader("⏳ 上半场胜率（含平局）")
+            col1_half, col2_half = st.columns([2, 3])
+            with col1_half:
+                st.dataframe(res_df[['map', 'pick次数', '上半场胜率', '上半场平率', '上半场负率']],
+                             use_container_width=True)
+            with col2_half:
+                fig_half = go.Figure()
+                for cat, col in [('胜', '上半场胜率'), ('平', '上半场平率'), ('负', '上半场负率')]:
+                    fig_half.add_trace(go.Bar(
+                        x=res_df['map'],
+                        y=res_df[col],
+                        name=cat,
+                        text=[f"{v:.1%}" for v in res_df[col]],
+                        textposition='outside'
+                    ))
+                fig_half.update_layout(barmode='group', yaxis_tickformat=".0%", height=400,
+                                       title="自选图上半场胜/平/负率")
+                st.plotly_chart(fig_half, use_container_width=True)
+            
             # 翻盘统计
             st.subheader("自选图翻盘统计")
             comeback = pick_df[pick_df['is_comeback'] == True]
             st.write(f"翻盘场次: {len(comeback)} / {len(pick_df)} ({len(comeback)/len(pick_df)*100:.1f}%)")
             if not comeback.empty:
-				display_rows = []
-				for _, row in comeback.iterrows():
-					pick = row['pick_team']
-					opp = row['team1'] if row['team2'] == pick else row['team2']
-					half_leader = row['first_half_leader']
-					diff = int(row['first_half_diff'])
-					# 自选队在上半场的角色及得分
-					if row['first_t_side'] == pick:
-						side_pick = 'T'
-						score_pick_half = int(row['first_t_score'])
-						score_opp_half = int(row['first_ct_score'])
-					else:
-						side_pick = 'CT'
-						score_pick_half = int(row['first_ct_score'])
-						score_opp_half = int(row['first_t_score'])
-					half_str = f"{pick}({side_pick}) {score_pick_half} - {score_opp_half} {opp}"
-					final_t1 = int(row['team1_score'])
-					final_t2 = int(row['team2_score'])
-					final_str = f"{row['team1']} {final_t1} - {final_t2} {row['team2']}"
-					display_rows.append({
-						'地图': row['map'],
-						'自选队伍': pick,
-						'对手': opp,
-						'上半场比分': half_str,
-						'上半场领先方': half_leader,
-						'落后分数': diff,
-						'最终比分': final_str,
-						'翻盘胜者': row['win']
-					})
-					st.dataframe(pd.DataFrame(display_rows), use_container_width=True)
+                # 构建易读的翻盘表格
+                display_rows = []
+                for _, row in comeback.iterrows():
+                    pick = row['pick_team']
+                    opp = row['team1'] if row['team2'] == pick else row['team2']
+                    half_leader = row['first_half_leader']
+                    diff = int(row['first_half_diff'])
+                    # 确定自选队在上半场的角色
+                    if row['first_t_side'] == pick:
+                        side_pick = 'T'
+                        score_pick_half = int(row['first_t_score'])
+                        score_opp_half = int(row['first_ct_score'])
+                    else:
+                        side_pick = 'CT'
+                        score_pick_half = int(row['first_ct_score'])
+                        score_opp_half = int(row['first_t_score'])
+                    half_str = f"{pick}({side_pick}) {score_pick_half} - {score_opp_half} {opp}"
+                    final_t1 = int(row['team1_score'])
+                    final_t2 = int(row['team2_score'])
+                    final_str = f"{row['team1']} {final_t1} - {final_t2} {row['team2']}"
+                    display_rows.append({
+                        '地图': row['map'],
+                        '自选队伍': pick,
+                        '对手': opp,
+                        '上半场比分': half_str,
+                        '上半场领先方': half_leader,
+                        '落后分数': diff,
+                        '最终比分': final_str,
+                        '翻盘胜者': row['win']
+                    })
+                st.dataframe(pd.DataFrame(display_rows), use_container_width=True)
 
 # ---------- 界面2 ----------
 def render_team_view(df):
@@ -689,13 +693,7 @@ def render_compare_predict(df):
         st.subheader(f"{team1} vs {team2} 逐地图预测")
         st.caption("预测模型: 全局胜率40% + 近5场状态30% + H2H交手记录30% (上限5场)")
 
-        # 地图选择（与上面独立，但复用同一个选择器也可，为了统一，我们再放一个选择框，或者直接用上面的 map_choice）
-        # 这里为了独立操作，另加一个，但也可以复用上面的值，不过用户可能希望分别选择。为了方便，使用同一个变量 map_choice。
-        # 但为了界面清晰，在预测 tab 内也显示当前选择的地图，并提供修改。
-        # 我们直接复用上面的 map_choice，并提供一个说明。
         st.info(f"当前查看地图: {map_choice}")
-        # 但如果用户想单独修改，可以重新加一个，但为了简洁，我们使用同一个选择器。
-        # 让用户知道可以通过顶部的下拉框切换。
 
         t_side = st.radio("本场谁先担任进攻方(T)?", [team1, team2], horizontal=True)
 
@@ -877,6 +875,7 @@ def render_compare_predict(df):
             st.metric("加时(OT)概率", f"{ot_rate:.1%}")
             st.progress(ot_rate, text="OT概率")
             st.divider()
+
 # ---------- 主函数 ----------
 def main():
     st.title("🎯 VALORANT 数据分析与预测系统")
@@ -887,6 +886,7 @@ def main():
             if df is not None:
                 st.session_state.uploaded_data = df
                 st.success(f"加载成功！共 {len(df)} 场有效记录。")
+                # 移除了之前的 st.info 提示
     if st.session_state.uploaded_data is not None:
         df = st.session_state.uploaded_data
         main_tabs = st.tabs(["🗺️ Map数据汇总", "👤 单战队数据查看", "⚔️ 对比与预测"])
