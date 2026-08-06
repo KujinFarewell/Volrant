@@ -210,7 +210,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['T胜率(加权)'],
                     name='T胜率',
-                    marker_color='red',
+                    marker_color='salmon',
                     text=[f'{v:.1%}' for v in map_stats_df['T胜率(加权)']],
                     textposition='outside'
                 ))
@@ -218,7 +218,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['CT胜率(加权)'],
                     name='CT胜率',
-                    marker_color='blue',
+                    marker_color='lightskyblue',
                     text=[f'{v:.1%}' for v in map_stats_df['CT胜率(加权)']],
                     textposition='outside'
                 ))
@@ -226,7 +226,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['平局率(加权)'],
                     name='平局率',
-                    marker_color='gold',
+                    marker_color='yellow',
                     text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
                     textposition='outside'
                 ))
@@ -236,7 +236,7 @@ def render_map_summary(df):
             
             with col2:
                 # 激烈程度分布（修改颜色并显示百分比）
-                color_map = {'碾压': 'green', '一般': 'yellow', '激烈': 'red', '胶着': 'darkred'}
+                color_map = {'碾压': 'lightgreen', '一般': 'yellow', '激烈': 'salmon', '胶着': 'red'}
                 categories = ['胶着', '激烈', '一般', '碾压']
                 fig2 = go.Figure()
                 for cat in categories:
