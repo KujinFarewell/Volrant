@@ -229,7 +229,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['平局率(加权)'],
                     name='平局率',
-                    marker_color='yellow',
+                    marker_color='gold',
                     text=[f'{v:.1%}' for v in map_stats_df['平局率(加权)']],
                     textposition='outside'
                 ))
@@ -259,7 +259,7 @@ def render_map_summary(df):
                     x=map_stats_df['map'],
                     y=map_stats_df['上半场平局率'],
                     name='平局率',
-                    marker_color='yellow',
+                    marker_color='gold',
                     text=[f'{v:.1%}' for v in map_stats_df['上半场平局率']],
                     textposition='outside'
                 ))
@@ -269,7 +269,7 @@ def render_map_summary(df):
             
             with col2:
                 # 激烈程度分布
-                color_map = {'碾压': 'lightgreen', '一般': 'yellow', '激烈': 'salmon', '胶着': 'red'}
+                color_map = {'碾压': 'lightgreen', '一般': 'gold', '激烈': 'salmon', '胶着': 'red'}
                 categories = ['胶着', '激烈', '一般', '碾压']
                 fig2 = go.Figure()
                 for cat in categories:
