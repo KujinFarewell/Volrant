@@ -910,10 +910,8 @@ def render_compare_predict(df):
                 # 加粗较高值
                 if t1_val > t2_val:
                     t1_str = f"**{t1_str}**"
-                    t1_str = f"<b style='color:green'>{t1_str}</b>"
                 elif t2_val > t1_val:
                     t2_str = f"**{t2_str}**"
-                    t2_str = f"<b style='color:green'>{t2_str}</b>"
                 rows.append(f"| {metric} | {t1_str} | {t2_str} | {diff_str} |")
             table_md = "\n".join([header, sep] + rows)
             st.markdown(table_md)
