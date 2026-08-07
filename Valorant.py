@@ -736,7 +736,6 @@ def render_team_view(df):
         st.plotly_chart(fig_ot_cb, use_container_width=True)
 
 # ---------- 界面3 ----------
-# ---------- 界面3 ----------
 def render_compare_predict(df):
     st.header("⚔️ 战队对阵对比与预测")
     all_teams = sorted(set(df['team1'].unique()).union(set(df['team2'].unique())))
@@ -828,7 +827,7 @@ def render_compare_predict(df):
                 total = len(mp)
                 wins = mp[mp['win'] == team].shape[0]
                 win_rate = wins / total if total > 0 else 0
-                # 上半场胜率 (队伍获胜的半场)
+                # 上半场胜率
                 half_wins = 0
                 for _, row in mp.iterrows():
                     if row['first_t_side'] == team and row['first_t_score'] > row['first_ct_score']:
@@ -869,7 +868,6 @@ def render_compare_predict(df):
             m2 = get_metrics(team2, map_name)
             if m1 is None or m2 is None:
                 continue
-            # 添加地图级别数据
             for metric in ['全场胜率', '上半场胜率', '手枪胜率', 'T胜率', 'CT胜率', '平局率', '先3率', '先6率', '先9率']:
                 compare_data.append({
                     'map': map_name,
@@ -881,21 +879,29 @@ def render_compare_predict(df):
             st.warning("无法获取对比数据")
             return
         metrics_order = ['全场胜率', '上半场胜率', '手枪胜率', 'T胜率', 'CT胜率', '平局率', '先3率', '先6率', '先9率']
-        # 确定展示哪些地图
         if map_choice == "全部地图":
             maps_to_show = common_maps
         else:
             maps_to_show = [map_choice]
-        # 逐地图展示表格
+        # 逐地图展示表格（HTML 实现，较高值加粗绿色）
         for map_name in maps_to_show:
             map_data = [d for d in compare_data if d['map'] == map_name]
             if not map_data:
                 continue
             st.subheader(f"📋 {map_name}")
-            # 构建Markdown表格
-            header = "| 指标 | {} | {} | 差值 |".format(team1, team2)
-            sep = "|---|---|---|---|"
-            rows = []
+            # 构建 HTML 表格
+            html = f"""
+            <table style="width:100%; border-collapse: collapse; font-size:16px;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #ddd;">
+                        <th style="text-align:left; padding:8px;">指标</th>
+                        <th style="text-align:left; padding:8px;">{team1}</th>
+                        <th style="text-align:left; padding:8px;">{team2}</th>
+                        <th style="text-align:left; padding:8px;">差值</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
             for metric in metrics_order:
                 row = next((x for x in map_data if x['metric'] == metric), None)
                 if not row:
@@ -903,33 +909,31 @@ def render_compare_predict(df):
                 t1_val = row['team1_val']
                 t2_val = row['team2_val']
                 diff = t1_val - t2_val
-                # 格式化百分比
                 t1_str = f"{t1_val:.1%}"
                 t2_str = f"{t2_val:.1%}"
                 diff_str = f"{diff:+.1%}" if diff != 0 else "0.0%"
-                # 加粗较高值
+                # 加粗并绿色高亮较高值
                 if t1_val > t2_val:
-                    t1_str = f"**{t1_str}**"
+                    t1_str = f"<b style='color:green'>{t1_str}</b>"
                 elif t2_val > t1_val:
-                    t2_str = f"**{t2_str}**"
-                rows.append(f"| {metric} | {t1_str} | {t2_str} | {diff_str} |")
-            table_md = "\n".join([header, sep] + rows)
-            st.markdown(table_md)
-        # 柱状图（保留原有指标，调整颜色）
-        # 为了绘图，我们将数据重新整理成扁平结构
-        flat_data = []
-        for d in compare_data:
-            if d['metric'] in ['全场胜率', '上半场胜率', '手枪胜率', '先3率', '先6率', '先9率']:
-                flat_data.append(d)
-        # 按地图过滤绘图数据
+                    t2_str = f"<b style='color:green'>{t2_str}</b>"
+                html += f"""
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding:8px;">{metric}</td>
+                        <td style="padding:8px;">{t1_str}</td>
+                        <td style="padding:8px;">{t2_str}</td>
+                        <td style="padding:8px;">{diff_str}</td>
+                    </tr>
+                """
+            html += "</tbody></table>"
+            st.markdown(html, unsafe_allow_html=True)
+        # 柱状图（颜色调整）
+        flat_data = [d for d in compare_data if d['metric'] in ['全场胜率', '上半场胜率', '手枪胜率', '先3率', '先6率', '先9率']]
         if map_choice == "全部地图":
             plot_data = flat_data
         else:
             plot_data = [d for d in flat_data if d['map'] == map_choice]
-        if not plot_data:
-            st.warning("没有可用于绘图的数据")
-        else:
-            # 将数据按指标重组
+        if plot_data:
             metrics_to_plot = ['全场胜率', '上半场胜率', '手枪胜率', '先3率', '先6率', '先9率']
             for metric in metrics_to_plot:
                 metric_data = [d for d in plot_data if d['metric'] == metric]
@@ -941,7 +945,7 @@ def render_compare_predict(df):
                 t2_vals = [d['team2_val'] for d in metric_data]
                 fig.add_trace(go.Bar(
                     x=maps, y=t1_vals, name=team1,
-                    marker_color='lightblue',
+                    marker_color='blue',
                     text=[f"{v:.1%}" for v in t1_vals],
                     textposition='outside'
                 ))
@@ -958,29 +962,23 @@ def render_compare_predict(df):
                     height=350
                 )
                 st.plotly_chart(fig, use_container_width=True)
+        # 雷达图
         st.subheader("雷达图对比")
         maps_to_show_radar = [map_choice] if map_choice != "全部地图" else common_maps
         for map_name in maps_to_show_radar:
-            # 获取该地图的所有指标（保持顺序）
             row_metrics = [d for d in compare_data if d['map'] == map_name]
             if not row_metrics:
                 continue
-            # 按metrics_order顺序提取
             categories = metrics_order
-            r1 = []
-            r2 = []
+            r1, r2 = [], []
             for metric in metrics_order:
                 d = next((x for x in row_metrics if x['metric'] == metric), None)
-                if d:
-                    r1.append(d['team1_val'])
-                    r2.append(d['team2_val'])
-                else:
-                    r1.append(0)
-                    r2.append(0)
+                r1.append(d['team1_val'] if d else 0)
+                r2.append(d['team2_val'] if d else 0)
             fig = go.Figure()
             fig.add_trace(go.Scatterpolar(
                 r=r1, theta=categories, fill='toself', name=team1,
-                line_color='lightblue', fillcolor='rgba(173,216,230,0.2)'
+                line_color='blue', fillcolor='rgba(173,216,230,0.2)'
             ))
             fig.add_trace(go.Scatterpolar(
                 r=r2, theta=categories, fill='toself', name=team2,
@@ -992,6 +990,7 @@ def render_compare_predict(df):
                 height=450
             )
             st.plotly_chart(fig, use_container_width=True)
+
 
     # ============================================================
     # 子界面2：对局预测
